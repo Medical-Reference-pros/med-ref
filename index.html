@@ -132,7 +132,7 @@ body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif;b
 .img-slot-label{font-size:10px;font-weight:700;color:#aaa;text-transform:uppercase;letter-spacing:0.5px;text-align:center}
 .img-slot-icon{font-size:22px;line-height:1}
 .img-slot-ts{font-size:9px;color:#888;text-align:center;padding:2px 6px 6px}
-.img-remove{position:absolute;top:4px;right:4px;width:22px;height:22px;background:rgba(0,0,0,0.5);color:#fff;border:none;border-radius:50%;font-size:12px;cursor:pointer;display:flex;align-items:center;justify-content:center;line-height:1;z-index:1}
+.img-remove{position:absolute;top:5px;right:5px;width:32px;height:32px;background:rgba(0,0,0,0.65);color:#fff;border:2px solid rgba(255,255,255,0.5);border-radius:50%;font-size:15px;cursor:pointer;display:flex;align-items:center;justify-content:center;line-height:1;z-index:2;-webkit-tap-highlight-color:transparent}
 .img-input{display:none}
 .img-limit-note{font-size:11px;color:#aaa;margin-top:6px;line-height:1.4}
 .card-actions{display:flex;gap:8px;justify-content:flex-end;margin-top:10px;padding-top:10px;border-top:1px solid #f0efe8;flex-wrap:wrap;align-items:center}
@@ -1026,9 +1026,9 @@ function buildCard(p){
     const img=p.images[slot];
     if(img&&img.dataUrl){
       return `<div class="img-slot filled">
-        <img src="${img.dataUrl}" alt="${img.label}" onclick="viewImg('${img.dataUrl}')">
+        <img src="${img.dataUrl}" alt="${img.label}" onclick="viewImg('${img.dataUrl}')" style="cursor:zoom-in">
         <div class="img-slot-ts">${img.label} &middot; ${new Date(img.ts).toLocaleTimeString([],{hour:'2-digit',minute:'2-digit'})}</div>
-        <button class="img-remove" onclick="removeImg(${p.id},${slot})" title="Remove">&#10005;</button>
+        <button class="img-remove" onclick="event.stopPropagation();removeImg(${p.id},${slot})" title="Remove image">&#10005;</button>
       </div>`;
     }
     const canAdd=totalImages<MAX_IMG;
@@ -1203,9 +1203,12 @@ function removeImg(patId,slot){
 }
 function viewImg(dataUrl){
   const ov=document.createElement('div');
-  ov.style.cssText='position:fixed;inset:0;background:rgba(0,0,0,0.92);z-index:9998;display:flex;align-items:center;justify-content:center;cursor:pointer;padding:12px';
-  ov.innerHTML='<img src="'+dataUrl+'" style="max-width:98vw;max-height:96vh;border-radius:8px;box-shadow:0 4px 24px rgba(0,0,0,0.6)">';
-  ov.onclick=()=>document.body.removeChild(ov);
+  ov.style.cssText='position:fixed;inset:0;background:rgba(0,0,0,0.95);z-index:9998;display:flex;flex-direction:column;align-items:center;justify-content:center;padding:12px';
+  ov.innerHTML=`
+    <button onclick="document.body.removeChild(this.closest('div[style]'))" style="position:absolute;top:16px;right:16px;width:44px;height:44px;background:rgba(255,255,255,0.15);border:2px solid rgba(255,255,255,0.4);border-radius:50%;color:#fff;font-size:20px;cursor:pointer;display:flex;align-items:center;justify-content:center;-webkit-tap-highlight-color:transparent">&#10005;</button>
+    <img src="${dataUrl}" style="max-width:98vw;max-height:88vh;border-radius:8px;object-fit:contain">
+    <div style="color:rgba(255,255,255,0.4);font-size:12px;margin-top:10px">Tap ✕ or anywhere outside image to close</div>`;
+  ov.onclick=e=>{if(e.target===ov)document.body.removeChild(ov);};
   document.body.appendChild(ov);
 }
 function showImgLimit(){alert('Image limit reached ('+MAX_IMG+'/'+MAX_IMG+'). Remove an existing image to add a new one.');}
