@@ -2383,41 +2383,111 @@ function buildHandoffText(){
   const dateStr=now.toLocaleDateString([],{weekday:'short',month:'short',day:'numeric'});
   let txt=`RTLine Shift Handoff — ${dateStr} ${timeStr}\n${'─'.repeat(36)}\n\n`;
   if(!patients.length){txt+='No patients on census.\n';return txt;}
+
+  const bsLabels={'clear':'Clear bilat','diminished-bilateral':'Diminished bilat',
+    'diminished-left':'Diminished L','diminished-right':'Diminished R',
+    'crackles-bilateral':'Crackles bilat','crackles-left':'Crackles L',
+    'crackles-right':'Crackles R','wheeze-exp':'Wheeze (exp)',
+    'wheeze-insp':'Wheeze (insp)','rhonchi':'Rhonchi','stridor':'Stridor',
+    'absent-left':'Absent L','absent-right':'Absent R'};
+  const thLabels={neb:'Neb 1',neb2:'Neb 2',mdi:'MDI 1',mdi2:'MDI 2',is:'IS',flutter:'Flutter',cpt:'CPT/Vest'};
+
   patients.forEach((p,i)=>{
     const d=p.data;
     const dev=DLABELS[p.device]||p.device;
-    // Header line
     const isVent=['vent','trach'].includes(p.device);
     const isBipapCpap=['bipap','cpap'].includes(p.device);
     const isHfnc=p.device==='hfnc';
     const isSimpleO2=['o2','o2hfc','o2mask','o2prb','o2nrb','o2venti'].includes(p.device);
+
+    // Header
     txt+=`${i+1}. Room ${p.room} — ${dev}`;
     if(isVent&&d.mode)txt+=` / ${d.mode}`;
     if(isVent&&d.sbtStatus&&d.sbtStatus!=='none')txt+=` [SBT: ${d.sbtStatus}${d.sbtTime?' @ '+d.sbtTime:''}]`;
     txt+='\n';
-    // Diagnosis line
+
+    // Diagnosis
     if(d.diagnosis){
       txt+=`   Dx: ${d.diagnosis}`;
       if(d.daysOnDevice)txt+=` (day ${d.daysOnDevice})`;
       txt+='\n';
     }
-    // Last ABG — compact single line
+
+    // Device settings — gated by device type
+    if(isVent){
+      if(d.mode==='APRV'){
+        if(d.aprvPhigh||d.aprvPlow)
+          txt+=`   APRV: P-high ${d.aprvPhigh||'?'} / P-low ${d.aprvPlow||'?'} cmH\u2082O | T-high ${d.aprvThigh||'?'}s / T-low ${d.aprvTlow||'?'}s | FiO\u2082 ${d.aprvFio2||'?'}\n`;
+      } else {
+        if(d.setRate||d.setVt||d.ventFio2||d.peep){
+          txt+=`   Settings: Rate ${d.setRate||'?'} | Vt ${d.setVt||'?'} mL | FiO\u2082 ${d.ventFio2||'?'} | PEEP ${d.peep||'?'} cmH\u2082O`;
+          if(d.ps)txt+=` | PS ${d.ps}`;
+          if(d.itime)txt+=` | I-time ${d.itime}s`;
+          if(d.plateau){
+            txt+=` | Plateau ${d.plateau} cmH\u2082O`;
+            if(d.peep)txt+=` (driving P ${parseInt(d.plateau)-parseInt(d.peep)})`;
+          }
+          txt+='\n';
+        }
+      }
+      if(d.ett)txt+=`   Airway: ${d.ett}${d.cuff?' | Cuff '+d.cuff+' cmH\u2082O':''}${d.secretions&&d.secretions!=='none'?' | Secretions: '+d.secretions:''}\n`;
+    }
+    if(isBipapCpap&&(d.ipap||d.epap)){
+      txt+=`   Settings: IPAP ${d.ipap||'?'} / EPAP ${d.epap||'?'} cmH\u2082O`;
+      if(d.ipap&&d.epap)txt+=` (PS ${parseInt(d.ipap)-parseInt(d.epap)})`;
+      if(d.bipapRate)txt+=` | Rate ${d.bipapRate}`;
+      if(d.bipapItime)txt+=` | I-time ${d.bipapItime}s`;
+      if(d.bipapFio2)txt+=` | FiO\u2082 ${d.bipapFio2}`;
+      txt+='\n';
+      if(d.maskSeal)txt+=`   Mask seal: ${d.maskSeal}\n`;
+    }
+    if(isHfnc&&(d.flow||d.fio2))
+      txt+=`   Settings: Flow ${d.flow||'?'} L/min | FiO\u2082 ${d.fio2||'?'}\n`;
+    if(isSimpleO2&&(d.flow||d.fio2))
+      txt+=`   O\u2082: ${d.flow?d.flow+' L/min':''}${(d.flow&&d.fio2)?' | ':''}${d.fio2?'Target '+d.fio2:''}\n`;
+
+    // ABG
     if(d.lastAbgPh||d.lastAbgPco2||d.lastAbgPo2){
-      txt+=`   ABG: pH ${d.lastAbgPh||'?'} / CO\u2082 ${d.lastAbgPco2||'?'} / O\u2082 ${d.lastAbgPo2||'?'}`;
+      txt+=`   ABG${d.lastAbgDate?' ('+d.lastAbgDate+')':''}: pH ${d.lastAbgPh||'?'} / PaCO\u2082 ${d.lastAbgPco2||'?'} / PaO\u2082 ${d.lastAbgPo2||'?'}`;
       if(d.lastAbgHco3)txt+=` / HCO\u2083 ${d.lastAbgHco3}`;
-      if(d.lastAbgFio2)txt+=` on ${d.lastAbgFio2}`;
-      if(d.lastAbgPo2&&d.lastAbgFio2)txt+=` (P/F ${(parseFloat(d.lastAbgPo2)/parseFloat(d.lastAbgFio2)).toFixed(0)})`;
+      if(d.lastAbgFio2)txt+=` on FiO\u2082 ${d.lastAbgFio2}`;
+      if(d.lastAbgPo2&&d.lastAbgFio2)txt+=` \u2192 P/F ${(parseFloat(d.lastAbgPo2)/parseFloat(d.lastAbgFio2)).toFixed(0)}`;
       txt+='\n';
     }
+
+    // SpO2 / Mentation / Tolerance
+    if(d.spo2||d.mentation||(d.tolerance&&d.tolerance!=='comfortable')){
+      const parts=[];
+      if(d.spo2)parts.push(`SpO\u2082 ${d.spo2}%`);
+      if(d.mentation)parts.push(d.mentation);
+      if(d.tolerance&&d.tolerance!=='comfortable')parts.push(d.tolerance);
+      txt+=`   Status: ${parts.join(' | ')}\n`;
+    }
+
+    // Breath sounds
+    if(d.breathSounds){
+      const sounds=d.breathSounds.split(',').map(s=>s.trim()).filter(Boolean)
+        .map(k=>bsLabels[k]||k).join(', ');
+      if(sounds)txt+=`   Breath sounds: ${sounds}\n`;
+    }
+
     // CXR
     if(d.cxr)txt+=`   CXR: ${d.cxr}\n`;
-    // SpO2 at last check
-    if(d.spo2)txt+=`   SpO\u2082: ${d.spo2}%`;
-    if(d.mentation)txt+=` | ${d.mentation}`;
-    if(d.tolerance&&d.tolerance!=='comfortable')txt+=` | ${d.tolerance}`;
-    if(d.spo2||d.mentation)txt+='\n';
-    // Clinical note — the key handoff narrative
+
+    // Therapies
+    if(d.therapies){
+      const parts=d.therapies.split('|').filter(Boolean).map(entry=>{
+        const [k,...rest]=entry.split(':');
+        const freq=rest.join(':');
+        if(k==='prn')return freq?`PRN: ${freq}`:'PRN';
+        return freq?`${thLabels[k]||k} ${freq}`:(thLabels[k]||k);
+      });
+      if(parts.length)txt+=`   Tx: ${parts.join(' | ')}\n`;
+    }
+
+    // Clinical note
     if(d.clinicalNote)txt+=`   \u201c${d.clinicalNote}\u201d\n`;
+
     txt+='\n';
   });
   txt+=`${'─'.repeat(36)}\nRTLine v1.0 — No PHI. Room numbers only.`;
@@ -2493,25 +2563,20 @@ function exportSession(){
     if(d.lastAbgPh||d.lastAbgPco2)txt+=`  Last ABG: pH ${d.lastAbgPh||'—'} / PaCO\u2082 ${d.lastAbgPco2||'—'} / PaO\u2082 ${d.lastAbgPo2||'—'} / HCO\u2083 ${d.lastAbgHco3||'—'} / FiO\u2082 ${d.lastAbgFio2||'—'}${(d.lastAbgPo2&&d.lastAbgFio2)?' / P/F '+(parseFloat(d.lastAbgPo2)/parseFloat(d.lastAbgFio2)).toFixed(0):''}\n`;
     if(d.cxr)txt+=`  CXR: ${d.cxr}\n`;
     if(d.clinicalNote)txt+=`  Clinical: ${d.clinicalNote}\n`;
-    const _isVent=['vent','trach'].includes(p.device);
-    const _isBipapCpap=['bipap','cpap'].includes(p.device);
-    const _isHfnc=p.device==='hfnc';
-    if(_isVent&&d.ett)txt+=`  Airway: ${d.ett}${d.cuff?' | Cuff: '+d.cuff+' cmH\u2082O':''}${d.secretions?' | Secretions: '+d.secretions:''}\n`;
-    if(_isVent){
-      if(d.mode==='APRV'){
-        if(d.aprvPhigh||d.aprvPlow)txt+=`  APRV: P-high ${d.aprvPhigh||'—'} | P-low ${d.aprvPlow||'—'} cmH\u2082O | T-high ${d.aprvThigh||'—'}s | T-low ${d.aprvTlow||'—'}s | FiO\u2082 ${d.aprvFio2||'—'}\n`;
-      } else {
-        if(d.setRate||d.setVt||d.ventFio2||d.peep)txt+=`  Vent settings: Rate ${d.setRate||'—'} | Vt ${d.setVt||'—'} mL | FiO\u2082 ${d.ventFio2||'—'} | PEEP ${d.peep||'—'} cmH\u2082O\n`;
-        if(d.itime||d.ps||d.plateau)txt+=`  Vent detail: I-time ${d.itime||'—'}s | PS ${d.ps||'—'} | Plateau ${d.plateau||'—'} cmH\u2082O${(d.plateau&&d.peep)?' | Driving P '+(parseInt(d.plateau)-parseInt(d.peep))+' cmH\u2082O':''}\n`;
-      }
-      if(d.mode||d.sbtStatus!=='none')txt+=`  Mode: ${d.mode||'—'}${d.sbtStatus!=='none'?' | SBT: '+d.sbtStatus+(d.sbtTime?' @ '+d.sbtTime:''):''}\n`;
-      const hasAlarms=d.alarmPhi||d.alarmPlo||d.alarmVtHi||d.alarmVtLo||d.alarmVeHi||d.alarmVeLo||d.alarmRrHi||d.alarmRrLo||d.alarmPeepHi||d.alarmPeepLo;
-      if(hasAlarms)txt+=`  Alarms: P ${d.alarmPlo||'—'}/${d.alarmPhi||'—'} | PEEP ${d.alarmPeepLo||'—'}/${d.alarmPeepHi||'—'} | Vt ${d.alarmVtLo||'—'}/${d.alarmVtHi||'—'} mL | Ve ${d.alarmVeLo||'—'}/${d.alarmVeHi||'—'} L | RR ${d.alarmRrLo||'—'}/${d.alarmRrHi||'—'} (low/high)\n`;
+    if(d.ett)txt+=`  Airway: ${d.ett}${d.cuff?' | Cuff: '+d.cuff+' cmH\u2082O':''}${d.secretions?' | Secretions: '+d.secretions:''}\n`;
+    if(d.mode==='APRV'){
+      if(d.aprvPhigh||d.aprvPlow)txt+=`  APRV: P-high ${d.aprvPhigh||'—'} | P-low ${d.aprvPlow||'—'} cmH\u2082O | T-high ${d.aprvThigh||'—'}s | T-low ${d.aprvTlow||'—'}s | FiO\u2082 ${d.aprvFio2||'—'}\n`;
+    } else {
+      if(d.setRate||d.setVt||d.ventFio2||d.peep)txt+=`  Vent settings: Rate ${d.setRate||'—'} | Vt ${d.setVt||'—'} mL | FiO\u2082 ${d.ventFio2||'—'} | PEEP ${d.peep||'—'} cmH\u2082O\n`;
+      if(d.itime||d.ps||d.plateau)txt+=`  Vent detail: I-time ${d.itime||'—'}s | PS ${d.ps||'—'} | Plateau ${d.plateau||'—'} cmH\u2082O${(d.plateau&&d.peep)?' | Driving P '+(parseInt(d.plateau)-parseInt(d.peep))+' cmH\u2082O':''}\n`;
     }
-    if(_isBipapCpap&&(d.ipap||d.epap))txt+=`  BiPAP/CPAP: IPAP ${d.ipap||'—'} | EPAP ${d.epap||'—'} cmH\u2082O${(d.ipap&&d.epap)?' | PS '+(parseInt(d.ipap)-parseInt(d.epap))+' cmH\u2082O':''} | Rate ${d.bipapRate||'—'} | I-time ${d.bipapItime||'—'}s | FiO\u2082 ${d.bipapFio2||'—'}\n`;
-    if(_isBipapCpap&&d.maskSeal)txt+=`  Mask seal: ${d.maskSeal}\n`;
-    if(_isHfnc&&(d.flow||d.fio2))txt+=`  Flow: ${d.flow||'—'} L/min | FiO\u2082/target: ${d.fio2||'—'}\n`;
-    if(_isHfnc&&(d.heater||d.heaterTemp))txt+=`  Heater: ${d.heater||'—'}${d.heaterTemp?' @ '+d.heaterTemp+'\u00b0C':''}\n`;
+    if(d.ipap||d.epap)txt+=`  BiPAP: IPAP ${d.ipap||'—'} | EPAP ${d.epap||'—'} cmH\u2082O${(d.ipap&&d.epap)?' | PS '+(parseInt(d.ipap)-parseInt(d.epap))+' cmH\u2082O':''} | Rate ${d.bipapRate||'—'} | I-time ${d.bipapItime||'—'}s | FiO\u2082 ${d.bipapFio2||'—'}\n`;
+    if(d.mode||d.sbtStatus!=='none')txt+=`  Mode: ${d.mode||'—'}${d.sbtStatus!=='none'?' | SBT: '+d.sbtStatus+(d.sbtTime?' @ '+d.sbtTime:''):''}\n`;
+    if(d.maskSeal)txt+=`  Mask seal: ${d.maskSeal}\n`;
+    if(d.flow||d.fio2)txt+=`  Flow: ${d.flow||'—'} | FiO\u2082/target: ${d.fio2||'—'}\n`;
+    if(d.heater||d.heaterTemp)txt+=`  Heater: ${d.heater||'—'}${d.heaterTemp?' @ '+d.heaterTemp+'\u00b0C':''}\n`;
+    const hasAlarms=d.alarmPhi||d.alarmPlo||d.alarmVtHi||d.alarmVtLo||d.alarmVeHi||d.alarmVeLo||d.alarmRrHi||d.alarmRrLo||d.alarmPeepHi||d.alarmPeepLo;
+    if(hasAlarms)txt+=`  Alarms: P ${d.alarmPlo||'—'}/${d.alarmPhi||'—'} | PEEP ${d.alarmPeepLo||'—'}/${d.alarmPeepHi||'—'} | Vt ${d.alarmVtLo||'—'}/${d.alarmVtHi||'—'} mL | Ve ${d.alarmVeLo||'—'}/${d.alarmVeHi||'—'} L | RR ${d.alarmRrLo||'—'}/${d.alarmRrHi||'—'} (low/high)\n`;
     if(d.spo2)txt+=`  SpO\u2082: ${d.spo2}%\n`;
     if(d.mentation||d.tolerance)txt+=`  Status: ${d.mentation||'—'} | Tolerance: ${d.tolerance||'—'}\n`;
 
