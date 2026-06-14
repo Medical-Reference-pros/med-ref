@@ -1711,7 +1711,7 @@ function addPatient(){
     open:true,
     data:{
           // patient info
-          diagnosis:'',daysOnDevice:'',lastAbgPh:'',lastAbgPco2:'',lastAbgPo2:'',lastAbgHco3:'',lastAbgFio2:'',
+          diagnosis:'',daysOnDevice:'',lastAbgPh:'',lastAbgPco2:'',lastAbgPo2:'',lastAbgHco3:'',lastAbgFio2:'',lastAbgDate:'',
           cxr:'',clinicalNote:'',
           ptInfoOpen:true,
           // ett/airway
@@ -1824,7 +1824,7 @@ function toggleBreathSound(patId, val, btn){
 function saveField(id){
   const p=patients.find(x=>x.id===id);
   if(!p)return;
-  ['diagnosis','daysOnDevice','lastAbgPh','lastAbgPco2','lastAbgPo2','lastAbgHco3','lastAbgFio2','cxr','clinicalNote',
+  ['diagnosis','daysOnDevice','lastAbgPh','lastAbgPco2','lastAbgPo2','lastAbgHco3','lastAbgFio2','lastAbgDate','cxr','clinicalNote',
    'ett','cuff','secretions','mode',
    'setRate','setVt','ventFio2','peep','itime','ps','plateau',
    'aprvPhigh','aprvPlow','aprvThigh','aprvTlow','aprvFio2',
@@ -2150,6 +2150,10 @@ function buildCard(p){
                 <span id="abg-tog-${p.id}" style="font-size:11px;color:#aaa;transition:transform 0.2s;display:inline-block;transform:${abgOpen?'rotate(0deg)':'rotate(-90deg)'}">&#9660;</span>
               </div>
               <div id="abg-body-${p.id}" style="display:${abgOpen?'block':'none'}">
+                <div class="card-grid" style="margin-bottom:6px">
+                  <div class="card-field full"><label>Date / Time obtained</label>
+                    <input type="text" id="p${p.id}-lastAbgDate" value="${d.lastAbgDate||''}" placeholder="e.g. 06/14 03:15" onchange="saveField(${p.id})"></div>
+                </div>
                 <div class="card-grid">
                   <div class="card-field"><label>pH</label>
                     <input type="number" id="p${p.id}-lastAbgPh" value="${d.lastAbgPh||''}" placeholder="7.38" step="0.01" onchange="saveField(${p.id})"></div>
@@ -2399,7 +2403,7 @@ function buildHandoffText(){
     }
     // Last ABG — compact single line
     if(d.lastAbgPh||d.lastAbgPco2||d.lastAbgPo2){
-      txt+=`   ABG: pH ${d.lastAbgPh||'?'} / CO\u2082 ${d.lastAbgPco2||'?'} / O\u2082 ${d.lastAbgPo2||'?'}`;
+      txt+=`   ABG${d.lastAbgDate?' ('+d.lastAbgDate+')':''}: pH ${d.lastAbgPh||'?'} / CO\u2082 ${d.lastAbgPco2||'?'} / O\u2082 ${d.lastAbgPo2||'?'}`;
       if(d.lastAbgHco3)txt+=` / HCO\u2083 ${d.lastAbgHco3}`;
       if(d.lastAbgFio2)txt+=` on ${d.lastAbgFio2}`;
       if(d.lastAbgPo2&&d.lastAbgFio2)txt+=` (P/F ${(parseFloat(d.lastAbgPo2)/parseFloat(d.lastAbgFio2)).toFixed(0)})`;
@@ -2486,7 +2490,7 @@ function exportSession(){
     const d=p.data;
     txt+=`Room ${p.room} — ${DLABELS[p.device]||p.device} (added ${p.ts})\n`;
     if(d.diagnosis)txt+=`  Dx: ${d.diagnosis}${d.daysOnDevice?' | Day '+d.daysOnDevice+' on device':''}\n`;
-    if(d.lastAbgPh||d.lastAbgPco2)txt+=`  Last ABG: pH ${d.lastAbgPh||'—'} / PaCO\u2082 ${d.lastAbgPco2||'—'} / PaO\u2082 ${d.lastAbgPo2||'—'} / HCO\u2083 ${d.lastAbgHco3||'—'} / FiO\u2082 ${d.lastAbgFio2||'—'}${(d.lastAbgPo2&&d.lastAbgFio2)?' / P/F '+(parseFloat(d.lastAbgPo2)/parseFloat(d.lastAbgFio2)).toFixed(0):''}\n`;
+    if(d.lastAbgPh||d.lastAbgPco2)txt+=`  Last ABG${d.lastAbgDate?' ('+d.lastAbgDate+')':''}: pH ${d.lastAbgPh||'—'} / PaCO\u2082 ${d.lastAbgPco2||'—'} / PaO\u2082 ${d.lastAbgPo2||'—'} / HCO\u2083 ${d.lastAbgHco3||'—'} / FiO\u2082 ${d.lastAbgFio2||'—'}${(d.lastAbgPo2&&d.lastAbgFio2)?' / P/F '+(parseFloat(d.lastAbgPo2)/parseFloat(d.lastAbgFio2)).toFixed(0):''}\n`;
     if(d.cxr)txt+=`  CXR: ${d.cxr}\n`;
     if(d.clinicalNote)txt+=`  Clinical: ${d.clinicalNote}\n`;
     if(d.ett)txt+=`  Airway: ${d.ett}${d.cuff?' | Cuff: '+d.cuff+' cmH\u2082O':''}${d.secretions?' | Secretions: '+d.secretions:''}\n`;
